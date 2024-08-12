@@ -1,95 +1,217 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
+import { useState, useEffect } from "react";
+import { Button, TextField, Typography, Select, MenuItem, Container, Box, Snackbar, IconButton, Paper } from "@mui/material";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import CloseIcon from '@mui/icons-material/Close';
 
 export default function Home() {
+  const [messages, setMessages] = useState([]);
+  const [userInput, setUserInput] = useState("");
+  const [chat, setChat] = useState(null);
+  const [theme, setTheme] = useState("light");
+  const [error, setError] = useState(null);
+
+  const API_KEY = "AIzaSyDIz3mUyvO17X-gmFvJmE86TJ2nknUPocg";
+  const MODEL_NAME = "gemini-1.0-pro";
+  const genAI = new GoogleGenerativeAI(API_KEY);
+
+  const generationConfig = {
+    temperature: 0.9,
+    topP: 1,
+    maxOutputTokens: 2048,
+    responseMimeType: "text/plain",
+  };
+
+  const safetySetting = [
+    {
+      category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+      threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    },
+    {
+      category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+      threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    },
+    {
+      category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+      threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    },
+    {
+      category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+      threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    }
+  ];
+
+  useEffect(() => {
+    const initChat = async () => {
+      try {
+        const newChat = await genAI
+          .getGenerativeModel({ model: MODEL_NAME })
+          .startChat({
+            generationConfig,
+            safetySetting,
+            history: messages.map((msg) => ({
+              text: msg.text,
+              role: msg.role,
+            })),
+          });
+        setChat(newChat);
+      } catch (error) {
+        setError("Failed to initialize chat. Please try again.");
+      }
+    };
+
+    initChat();
+  }, []);
+
+  const handleSendMessage = async () => {
+    try {
+      const userMessage = {
+        text: userInput,
+        role: "user",
+        timestamp: new Date(),
+      };
+      setMessages((prevMessages) => [...prevMessages, userMessage]);
+      setUserInput("");
+      if (chat) {
+        const result = await chat.sendMessage(userInput);
+        const botMessage = {
+          text: result.response.text(),
+          role: "bot",
+          timestamp: new Date(),
+        };
+        setMessages((prevMessages) => [...prevMessages, botMessage]);
+      }
+    } catch (error) {
+      setError("Failed to send message. Please try again.");
+    }
+  };
+
+  const handleThemeChange = (event) => {
+    setTheme(event.target.value);
+  };
+
+  const getThemeColors = () => {
+    switch (theme) {
+      case "light":
+        return {
+          primary: "#ffffff",
+          secondary: "#f0f0f0",
+          accent: "#2196f3",
+          text: "#333333",
+        };
+      case "dark":
+        return {
+          primary: "#121212",
+          secondary: "#1e1e1e",
+          accent: "#ffeb3b",
+          text: "#e0e0e0",
+        };
+      default:
+        return {
+          primary: "#ffffff",
+          secondary: "#f0f0f0",
+          accent: "#2196f3",
+          text: "#333333",
+        };
+    }
+  };
+
+  const handleKeyPress = (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const { primary, secondary, accent, text } = getThemeColors();
+
   return (
-    <main className={styles.main}>
-      <div className={styles.description}>
-        <p>
-          Get started by editing&nbsp;
-          <code className={styles.code}>app/page.js</code>
-        </p>
-        <div>
-          <a
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <Container
+      component={Paper}
+      style={{ backgroundColor: primary, height: '100vh', display: 'flex', flexDirection: 'column' }}
+    >
+      <Box p={2} display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h5" style={{ color: text }}>Virtual Assistant ChatBot</Typography>
+        <Box display="flex" alignItems="center">
+          <Typography variant="body2" style={{ color: text, marginRight: '8px' }}>Theme:</Typography>
+          <Select
+            value={theme}
+            onChange={handleThemeChange}
+            style={{ color: text, borderColor: text }}
           >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className={styles.vercelLogo}
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
-
-      <div className={styles.center}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
+            <MenuItem value="light">Light</MenuItem>
+            <MenuItem value="dark">Dark</MenuItem>
+          </Select>
+        </Box>
+      </Box>
+      <Box
+        flex={1}
+        overflow="auto"
+        style={{ backgroundColor: secondary, borderRadius: '4px', padding: '8px' }}
+      >
+        {messages.map((msg, index) => (
+          <Box
+            key={index}
+            display="flex"
+            flexDirection={msg.role === "user" ? "row-reverse" : "row"}
+            mb={2}
+          >
+            <Box
+              p={2}
+              borderRadius="8px"
+              style={{
+                backgroundColor: msg.role === "user" ? accent : primary,
+                color: msg.role === "user" ? "#ffffff" : text,
+                maxWidth: '75%',
+              }}
+            >
+              {msg.text}
+            </Box>
+            <Typography
+              variant="caption"
+              style={{ color: text, marginLeft: '8px', alignSelf: 'flex-end' }}
+            >
+              {msg.role === "bot" ? "Bot" : "You"} - {msg.timestamp.toLocaleTimeString()}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+      {error && (
+        <Snackbar
+          open={Boolean(error)}
+          autoHideDuration={6000}
+          onClose={() => setError(null)}
+          message={error}
+          action={
+            <IconButton
+              size="small"
+              color="inherit"
+              onClick={() => setError(null)}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          }
         />
-      </div>
-
-      <div className={styles.grid}>
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
+      )}
+      <Box display="flex" alignItems="center" mt={2}>
+        <TextField
+          placeholder="Type your message..."
+          value={userInput}
+          onChange={(e) => setUserInput(e.target.value)}
+          onKeyDown={handleKeyPress}
+          variant="outlined"
+          fullWidth
+          style={{ marginRight: '8px' }}
+        />
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={handleSendMessage}
+          style={{ backgroundColor: accent, color: '#ffffff' }}
         >
-          <h2>
-            Docs <span>-&gt;</span>
-          </h2>
-          <p>Find in-depth information about Next.js features and API.</p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Learn <span>-&gt;</span>
-          </h2>
-          <p>Learn about Next.js in an interactive course with&nbsp;quizzes!</p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Templates <span>-&gt;</span>
-          </h2>
-          <p>Explore starter templates for Next.js.</p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Deploy <span>-&gt;</span>
-          </h2>
-          <p>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+          Send
+        </Button>
+      </Box>
+    </Container>
   );
 }
